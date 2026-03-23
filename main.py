@@ -3,6 +3,8 @@ import datetime
 import os
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
+from datetime import time
+from zoneinfo import ZoneInfo
 # from dotenv import load_dotenv
 # load_dotenv()
 
@@ -69,6 +71,49 @@ def get_weather(days=1):
     text += "\nХорошего дня ☀️"
     return text
 
+def get_weather_today_detailed():
+    url = "https://api.weather.yandex.ru/v2/forecast"
+    headers = {"X-Yandex-API-Key": YANDEX_API_KEY}
+    params = {
+        "lat": LAT,
+        "lon": LON,
+        "lang": "ru_RU",
+        "limit": 1
+    }
+
+    response = requests.get(url, headers=headers, params=params)
+    data = response.json()
+
+    fact = data["fact"]
+    forecast = data["forecasts"][0]["parts"]
+
+    condition_now = CONDITIONS.get(fact["condition"], fact["condition"])
+
+    def part_text(name, part):
+        cond = CONDITIONS.get(part.get("condition", ""), "")
+        return f"{name}: {part.get('temp', '?')}°C {cond}"
+
+    text = f"""
+🌅 <b>Доброе утро!</b>
+
+🌆 <b>Погода в Краснодаре сегодня</b>
+
+📍 Сейчас:
+🌡 {fact['temp']}°C (ощущается {fact['feels_like']}°C)
+💨 Ветер: {fact['wind_speed']} м/с
+☁️ {condition_now}
+
+📅 <b>По частям дня:</b>
+
+🌄 Утро: {forecast['morning']['temp']}°C {CONDITIONS.get(forecast['morning']['condition'], '')}
+🌞 День: {forecast['day']['temp']}°C {CONDITIONS.get(forecast['day']['condition'], '')}
+🌇 Вечер: {forecast['evening']['temp']}°C {CONDITIONS.get(forecast['evening']['condition'], '')}
+🌙 Ночь: {forecast['night']['temp']}°C {CONDITIONS.get(forecast['night']['condition'], '')}
+
+Хорошего дня ☀️
+"""
+    return text
+
 
 # --- Команды ---
 
@@ -90,24 +135,29 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def weather_now(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(get_weather(1), parse_mode="HTML")
+    text = "📍 <b>Сейчас:</b>\n" + get_weather(1)
+    await update.message.reply_text(text, parse_mode="HTML")
 
 
 async def weather_today(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(get_weather(1), parse_mode="HTML")
+    text = get_weather_today_detailed()
+    await update.message.reply_text(text, parse_mode="HTML")
 
 
 async def weather_3(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(get_weather(3), parse_mode="HTML")
+    text = get_weather(3)
+    await update.message.reply_text(text, parse_mode="HTML")
 
 
 async def weather_7(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(get_weather(7), parse_mode="HTML")
+    text = get_weather(7)
+    await update.message.reply_text(text, parse_mode="HTML")
 
 
 async def send_daily(context: ContextTypes.DEFAULT_TYPE):
     chat_id = context.job.chat_id
-    text = "🌅 <b>Доброе утро!</b>\n" + get_weather(1)
+
+    text = get_weather_today_detailed()
 
     await context.bot.send_message(
         chat_id=chat_id,
@@ -121,7 +171,7 @@ async def subscribe(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     context.job_queue.run_daily(
         send_daily,
-        time=datetime.time(hour=8, minute=0),
+        time=time(hour=8, minute=0, tzinfo=ZoneInfo("Europe/Moscow")),
         chat_id=chat_id
     )
 
