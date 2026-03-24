@@ -1,12 +1,9 @@
 import requests
-import datetime
 import os
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 from datetime import time
 from zoneinfo import ZoneInfo
-# from dotenv import load_dotenv
-# load_dotenv()
 
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 YANDEX_API_KEY = os.getenv("YANDEX_API_KEY")
@@ -28,6 +25,8 @@ CONDITIONS = {
 }
 
 
+# ------------------ ОСНОВНАЯ ПОГОДА ------------------
+
 def get_weather(days=1):
     url = "https://api.weather.yandex.ru/v2/forecast"
     headers = {"X-Yandex-API-Key": YANDEX_API_KEY}
@@ -41,16 +40,16 @@ def get_weather(days=1):
     response = requests.get(url, headers=headers, params=params)
     data = response.json()
 
-    fact = data["fact"]
-    forecasts = data["forecasts"]
+    fact = data.get("fact", {})
+    forecasts = data.get("forecasts", [])
 
-    condition = CONDITIONS.get(fact["condition"], fact["condition"])
+    condition = CONDITIONS.get(fact.get("condition", ""), fact.get("condition", ""))
 
     text = f"""
 🌆 <b>Погода в Краснодаре</b>
 
-🌡 Сейчас: {fact['temp']}°C (ощущается {fact['feels_like']}°C)
-💨 Ветер: {fact['wind_speed']} м/с
+🌡 Сейчас: {fact.get('temp', '?')}°C (ощущается {fact.get('feels_like', '?')}°C)
+💨 Ветер: {fact.get('wind_speed', '?')} м/с
 ☁️ {condition}
 """
 
@@ -59,8 +58,8 @@ def get_weather(days=1):
         text += "\n📅 <b>Прогноз:</b>\n"
 
         for day in forecasts:
-            date = day["date"]
-            part = day["parts"]["day"]
+            date = day.get("date", "?")
+            part = day.get("parts", {}).get("day", {})
 
             temp_min = part.get("temp_min", "?")
             temp_max = part.get("temp_max", "?")
@@ -70,6 +69,9 @@ def get_weather(days=1):
 
     text += "\nХорошего дня ☀️"
     return text
+
+
+# ------------------ ДЕТАЛЬНО СЕГОДНЯ ------------------
 
 def get_weather_today_detailed():
     url = "https://api.weather.yandex.ru/v2/forecast"
@@ -84,14 +86,16 @@ def get_weather_today_detailed():
     response = requests.get(url, headers=headers, params=params)
     data = response.json()
 
-    fact = data["fact"]
-    forecast = data["forecasts"][0]["parts"]
+    fact = data.get("fact", {})
+    forecasts = data.get("forecasts", [])
+    parts = forecasts[0].get("parts", {}) if forecasts else {}
 
-    condition_now = CONDITIONS.get(fact["condition"], fact["condition"])
+    condition_now = CONDITIONS.get(fact.get("condition", ""), fact.get("condition", ""))
 
     def part_text(name, part):
+        temp = part.get("temp") or part.get("temp_avg") or "?"
         cond = CONDITIONS.get(part.get("condition", ""), "")
-        return f"{name}: {part.get('temp', '?')}°C {cond}"
+        return f"{name}: {temp}°C {cond}"
 
     text = f"""
 🌅 <b>Доброе утро!</b>
@@ -99,23 +103,23 @@ def get_weather_today_detailed():
 🌆 <b>Погода в Краснодаре сегодня</b>
 
 📍 Сейчас:
-🌡 {fact['temp']}°C (ощущается {fact['feels_like']}°C)
-💨 Ветер: {fact['wind_speed']} м/с
+🌡 {fact.get('temp', '?')}°C (ощущается {fact.get('feels_like', '?')}°C)
+💨 Ветер: {fact.get('wind_speed', '?')} м/с
 ☁️ {condition_now}
 
 📅 <b>По частям дня:</b>
 
-🌄 Утро: {forecast['morning']['temp']}°C {CONDITIONS.get(forecast['morning']['condition'], '')}
-🌞 День: {forecast['day']['temp']}°C {CONDITIONS.get(forecast['day']['condition'], '')}
-🌇 Вечер: {forecast['evening']['temp']}°C {CONDITIONS.get(forecast['evening']['condition'], '')}
-🌙 Ночь: {forecast['night']['temp']}°C {CONDITIONS.get(forecast['night']['condition'], '')}
+🌄 {part_text("Утро", parts.get("morning", {}))}
+🌞 {part_text("День", parts.get("day", {}))}
+🌇 {part_text("Вечер", parts.get("evening", {}))}
+🌙 {part_text("Ночь", parts.get("night", {}))}
 
 Хорошего дня ☀️
 """
     return text
 
 
-# --- Команды ---
+# ------------------ КОМАНДЫ ------------------
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = """
@@ -156,7 +160,6 @@ async def weather_7(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def send_daily(context: ContextTypes.DEFAULT_TYPE):
     chat_id = context.job.chat_id
-
     text = get_weather_today_detailed()
 
     await context.bot.send_message(
@@ -178,7 +181,7 @@ async def subscribe(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Подписка включена 🌅")
 
 
-# --- Запуск ---
+# ------------------ ЗАПУСК ------------------
 
 app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
 
