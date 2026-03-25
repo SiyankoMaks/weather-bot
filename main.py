@@ -174,7 +174,7 @@ async def subscribe(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     context.job_queue.run_daily(
         send_daily,
-        time=time(hour=8, minute=0, tzinfo=ZoneInfo("Europe/Moscow")),
+        time=time(hour=5, minute=0),
         chat_id=chat_id
     )
 
